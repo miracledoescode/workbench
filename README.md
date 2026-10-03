@@ -22,6 +22,17 @@ workbench stats
 
 `agent` runs a tool-calling loop (calculator, current_time, read_file confined to the working directory). Every API call in the loop is logged. Use `--tools` to limit which tools are enabled and `--max-turns` to cap the loop.
 
+### Free / non-Anthropic models
+
+Set `WORKBENCH_PROVIDER=openai` to use any OpenAI-compatible `/chat/completions` endpoint. Then set `WORKBENCH_BASE_URL`, `WORKBENCH_MODEL` and, if the provider needs one, `WORKBENCH_API_KEY`. For example, with local [Ollama](https://ollama.com) (free, no key):
+
+```bash
+export WORKBENCH_PROVIDER=openai WORKBENCH_BASE_URL=http://localhost:11434/v1 WORKBENCH_MODEL=<a model you pulled>
+workbench agent "What is 6*7?"
+```
+
+`agent` needs a model that supports tool calling.
+
 ### Docker
 
 ```bash

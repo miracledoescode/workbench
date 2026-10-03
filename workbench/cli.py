@@ -14,15 +14,34 @@ def _env_float(name: str) -> float | None:
     return float(value) if value else None
 
 
-def cmd_ask(args) -> int:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+def _config() -> dict | None:
+    """Provider settings from env. Returns None (after printing why) if incomplete."""
+    provider = os.environ.get("WORKBENCH_PROVIDER", "anthropic")
     model = os.environ.get("WORKBENCH_MODEL")
-    if not api_key or not model:
-        print("Set ANTHROPIC_API_KEY and WORKBENCH_MODEL (see .env.example).", file=sys.stderr)
+    if provider == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key or not model:
+            print("Set ANTHROPIC_API_KEY and WORKBENCH_MODEL (see .env.example).", file=sys.stderr)
+            return None
+        return {"provider": provider, "api_key": api_key, "model": model}
+    if provider == "openai":
+        base_url = os.environ.get("WORKBENCH_BASE_URL")
+        if not base_url or not model:
+            print("Set WORKBENCH_BASE_URL and WORKBENCH_MODEL (see .env.example).", file=sys.stderr)
+            return None
+        return {"provider": provider, "base_url": base_url, "model": model,
+                "api_key": os.environ.get("WORKBENCH_API_KEY", "")}
+    print(f"Unknown WORKBENCH_PROVIDER {provider!r}; use 'anthropic' or 'openai'.", file=sys.stderr)
+    return None
+
+
+def cmd_ask(args) -> int:
+    cfg = _config()
+    if cfg is None:
         return 1
 
     try:
-        result = client.send(args.prompt, api_key=api_key, model=model, max_tokens=args.max_tokens)
+        result = client.send(args.prompt, max_tokens=args.max_tokens, **cfg)
     except httpx.HTTPStatusError as e:
         print(f"API error {e.response.status_code}: {e.response.text}", file=sys.stderr)
         return 1
@@ -39,10 +58,8 @@ def cmd_ask(args) -> int:
 
 
 def cmd_agent(args) -> int:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    model = os.environ.get("WORKBENCH_MODEL")
-    if not api_key or not model:
-        print("Set ANTHROPIC_API_KEY and WORKBENCH_MODEL (see .env.example).", file=sys.stderr)
+    cfg = _config()
+    if cfg is None:
         return 1
 
     price_in, price_out = _env_float("WORKBENCH_PRICE_IN"), _env_float("WORKBENCH_PRICE_OUT")
@@ -59,7 +76,7 @@ def cmd_agent(args) -> int:
         print(f"[tool] {name}({json.dumps(tool_input)}) -> {status}: {output[:200]}", file=sys.stderr)
 
     try:
-        result = agent.run(args.prompt, api_key=api_key, model=model, max_tokens=args.max_tokens,
+        result = agent.run(args.prompt, max_tokens=args.max_tokens, **cfg,
                            max_turns=args.max_turns, tool_names=args.tools,
                            on_call=on_call, on_tool=on_tool)
     except httpx.HTTPStatusError as e:

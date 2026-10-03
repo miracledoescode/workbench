@@ -9,6 +9,7 @@ from . import client, tools
 def run(prompt: str, *, api_key: str, model: str, max_tokens: int = 1024, max_turns: int = 10,
         tool_names: list[str] | None = None, on_call: Callable[[dict], None] | None = None,
         on_tool: Callable[[str, dict, str, bool], None] | None = None,
+        provider: str = "anthropic", base_url: str | None = None,
         http: httpx.Client | None = None) -> dict:
     """Returns {"text", "turns", "stop_reason", "messages"}. `on_call` gets one usage record per API call."""
     names = tool_names or list(tools.TOOLS)
@@ -17,7 +18,8 @@ def run(prompt: str, *, api_key: str, model: str, max_tokens: int = 1024, max_tu
 
     for turn in range(1, max_turns + 1):
         data, latency_ms = client.create(messages, api_key=api_key, model=model,
-                                         max_tokens=max_tokens, tools=schemas, client=http)
+                                         max_tokens=max_tokens, tools=schemas, provider=provider,
+                                         base_url=base_url, client=http)
         if on_call:
             on_call(client.usage_record(data, latency_ms) | {"turn": turn})
         messages.append({"role": "assistant", "content": data["content"]})
