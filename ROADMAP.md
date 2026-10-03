@@ -11,7 +11,7 @@ Milestones, not dates. Each one ships something usable.
 - [ ] Exercise: multi-turn chat with history
 
 ## v1 — LLM apps
-- [ ] Tool calling (agent loop)
+- [x] Tool calling (agent loop): `workbench agent`, built-in calculator / current_time / read_file
 - [ ] Ingest a folder of docs + RAG retrieval
 - [ ] Expose tools over MCP
 

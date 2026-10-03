@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from . import client, telemetry
+from . import agent, client, telemetry, tools
 
 
 def _env_float(name: str) -> float | None:
@@ -38,6 +38,42 @@ def cmd_ask(args) -> int:
     return 0
 
 
+def cmd_agent(args) -> int:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    model = os.environ.get("WORKBENCH_MODEL")
+    if not api_key or not model:
+        print("Set ANTHROPIC_API_KEY and WORKBENCH_MODEL (see .env.example).", file=sys.stderr)
+        return 1
+
+    price_in, price_out = _env_float("WORKBENCH_PRICE_IN"), _env_float("WORKBENCH_PRICE_OUT")
+    totals = {"input_tokens": 0, "output_tokens": 0, "latency_ms": 0}
+
+    def on_call(record):
+        cost = telemetry.cost_usd(record["input_tokens"], record["output_tokens"], price_in, price_out)
+        telemetry.log_call(Path(args.log), record | {"cost_usd": cost, "kind": "agent"})
+        for k in totals:
+            totals[k] += record[k]
+
+    def on_tool(name, tool_input, output, is_error):
+        status = "error" if is_error else "ok"
+        print(f"[tool] {name}({json.dumps(tool_input)}) -> {status}: {output[:200]}", file=sys.stderr)
+
+    try:
+        result = agent.run(args.prompt, api_key=api_key, model=model, max_tokens=args.max_tokens,
+                           max_turns=args.max_turns, tool_names=args.tools,
+                           on_call=on_call, on_tool=on_tool)
+    except httpx.HTTPStatusError as e:
+        print(f"API error {e.response.status_code}: {e.response.text}", file=sys.stderr)
+        return 1
+
+    print(result["text"])
+    cost = telemetry.cost_usd(totals["input_tokens"], totals["output_tokens"], price_in, price_out)
+    print(f"\n[{result['turns']} turns · stop: {result['stop_reason']} · "
+          f"{totals['input_tokens']} in / {totals['output_tokens']} out · "
+          f"{totals['latency_ms']} ms · cost {cost if cost is not None else 'n/a'}]", file=sys.stderr)
+    return 0 if result["stop_reason"] != "max_turns" else 2
+
+
 def cmd_stats(args) -> int:
     print(json.dumps(telemetry.summarize(Path(args.log)), indent=2))
     return 0
@@ -52,6 +88,14 @@ def main(argv=None) -> int:
     ask.add_argument("prompt")
     ask.add_argument("--max-tokens", type=int, default=1024)
     ask.set_defaults(func=cmd_ask)
+
+    ag = sub.add_parser("agent", help="Run a tool-calling agent loop; logs every API call.")
+    ag.add_argument("prompt")
+    ag.add_argument("--max-tokens", type=int, default=1024)
+    ag.add_argument("--max-turns", type=int, default=10)
+    ag.add_argument("--tools", nargs="+", choices=list(tools.TOOLS), default=None,
+                    help="Tools to enable (default: all).")
+    ag.set_defaults(func=cmd_agent)
 
     stats = sub.add_parser("stats", help="Summarize logged calls.")
     stats.set_defaults(func=cmd_stats)

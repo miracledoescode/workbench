@@ -16,8 +16,11 @@ cp .env.example .env        # fill in your key and model
 set -a; source .env; set +a
 
 workbench ask "Explain RAG in two sentences."
+workbench agent "What is 17% of 2340? Then read pyproject.toml and name the dependencies."
 workbench stats
 ```
+
+`agent` runs a tool-calling loop (calculator, current_time, read_file confined to the working directory). Every API call in the loop is logged. Use `--tools` to limit which tools are enabled and `--max-turns` to cap the loop.
 
 ### Docker
 
